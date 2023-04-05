@@ -1,0 +1,18 @@
+      Line   Address     Label    Opcode        Operand
+=======================================================
+         5      0000       SUM     START              0
+        10      0000     FIRST       LDX             #0
+        15      0003                 LDA             #0
+        20      0006                +LDB        #TABLE2
+        25      000A                BASE         TABLE2
+        30      000A      LOOP       ADD        TABLE,X
+        35      000D                 ADD       TABLE2,X
+        40      0010                 TIX          COUNT
+        45      0013                 JLT           LOOP
+        50      0016                +STA          TOTAL
+        55      001A                RSUB               
+        60      001D     COUNT      RESW              1
+        65      0020     TABLE      RESW           2000
+        70      1790    TABLE2      RESW           2000
+        75      2F00     TOTAL      RESW              1
+        80      2F03                 END          FIRST
