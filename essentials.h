@@ -5,6 +5,7 @@
 #include "OPTAB.h"
 #include "SYMTAB.h"
 #include "REGTAB.h"
+#include "CSECTTAB.h"
 
 using namespace std;
 
@@ -33,6 +34,24 @@ bool checkLabelExistsInSYMTAB(string LABEL)
 bool checkOpcodeExistsInOPTAB(string OPCODE)
 {
     if (OPTAB.find(OPCODE) != OPTAB.end())
+    {
+        return true;
+    }
+    return false;
+}
+
+bool checkLabelExistsInEXTDEFTAB(string currSectName, string LABEL)
+{
+    if (CSECTTAB[currSectName].EXTDEFTAB.find(LABEL) != CSECTTAB[currSectName].EXTDEFTAB.end())
+    {
+        return true;
+    }
+    return false;
+}
+
+bool checkLabelExistsInEXTREFTAB(string currSectName, string LABEL)
+{
+    if (CSECTTAB[currSectName].EXTREFTAB.find(LABEL) != CSECTTAB[currSectName].EXTREFTAB.end())
     {
         return true;
     }
@@ -70,23 +89,24 @@ void processIntermediateFileLine(string fileLine, int &lineNum, string &address,
     }
     lineNum = stoi(tempLineNum);
 
-    while (fileLine[index] == ' ' || fileLine[index] == '\t')
-    {
-        index++;
-    }
-    while ((index <= fileLine.length() - 1) && (fileLine[index] != ' ' && fileLine[index] != '\t'))
-    {
-        address += fileLine[index];
-        index++;
-    }
-
     int spCtr = 0;
     while (fileLine[index] == ' ' || fileLine[index] == '\t')
     {
         index++;
         spCtr++;
     }
-    while ((index <= fileLine.length() - 1) && (fileLine[index] != ' ' && fileLine[index] != '\t') && (spCtr < 10))
+    while ((index <= fileLine.length() - 1) && (fileLine[index] != ' ' && fileLine[index] != '\t' && (spCtr < 10)))
+    {
+        address += fileLine[index];
+        index++;
+    }
+
+    while (fileLine[index] == ' ' || fileLine[index] == '\t')
+    {
+        index++;
+        spCtr++;
+    }
+    while ((index <= fileLine.length() - 1) && (fileLine[index] != ' ' && fileLine[index] != '\t') && (spCtr < 20))
     {
         LABEL += fileLine[index];
         index++;
@@ -123,6 +143,36 @@ bool checkIfStringIsNumeric(string s)
         }
     }
     return true;
+}
+
+void processEXTDEFOperand(string currSectName, string OPERAND)
+{
+    string tempLABEL;
+    for (int i=0; i<OPERAND.length(); i++)
+    {
+        while (OPERAND[i] != ',' && i<OPERAND.length())
+        {
+            tempLABEL += OPERAND[i];
+            i++;
+        }
+        CSECTTAB[currSectName].EXTDEFTAB[tempLABEL] = "";
+        tempLABEL = "";
+    }
+}
+
+void processEXTREFOperand(string currSectName, string OPERAND)
+{
+    string tempLABEL;
+    for (int i=0; i<OPERAND.length(); i++)
+    {
+        while (OPERAND[i] != ',' && i<OPERAND.length())
+        {
+            tempLABEL += OPERAND[i];
+            i++;
+        }
+        CSECTTAB[currSectName].EXTREFTAB[tempLABEL] = "";
+        tempLABEL = "";
+    }
 }
 
 #endif

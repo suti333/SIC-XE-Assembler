@@ -1,0 +1,8 @@
+    Symbol   Address      Type
+==============================
+     COUNT      001D         R
+     FIRST      0000         R
+      LOOP      000A         R
+     TABLE      0020         R
+    TABLE2      1790         R
+     TOTAL      2F00         R

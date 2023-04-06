@@ -4,8 +4,8 @@ using namespace std;
 
 ifstream sourceFile;
 ofstream intermediateFile, errorFile;
-string fileName, fileLine, LABEL, OPCODE, OPERAND, OPERAND2, tempOPCODE;
-int lineNum = 0, index = 0, LOCCTR, prevLOCCTR = 0, startAddr, programLength;
+string fileName, fileLine, LABEL, OPCODE, OPERAND, OPERAND2, tempOPCODE, currSectName, firstExecutableSect;
+int lineNum = 0, index = 0, LOCCTR, prevLOCCTR = 0, startAddr, programLength, sectCtr;
 bool format4Flag = false, errorFlag;
 
 void pass1()
@@ -59,55 +59,81 @@ void pass1()
         LOCCTR = 0;
     }
 
+    currSectName = "DEFAULT";
+    sectCtr = 0;
+
     while (OPCODE != "END")
     {
-        if (!checkCommentLine(fileLine))
+        while (OPCODE != "CSECT" && OPCODE != "END")
         {
-            if (LABEL.length() != 0)
+            if (!checkCommentLine(fileLine))
             {
-                if (checkLabelExistsInSYMTAB(LABEL))
+                if (LABEL.length() != 0)
                 {
-                    errorFile << "Line " << lineNum << " : Duplicate symbol for '" << LABEL << "'. Previously defined at " << SYMTAB[LABEL].address << endl;
-                    errorFlag = true;
-                }
-                else
-                {
-                    char address[10];
-                    sprintf(address, "%04X", LOCCTR);
-                    SYMTAB[LABEL].address = address;
-                    SYMTAB[LABEL].type = 'R';
-                }
-            }
-
-            if (OPCODE[0] == '+')
-            {
-                format4Flag = true;
-                tempOPCODE = OPCODE.substr(1, OPCODE.length() - 1);
-            }
-            else
-            {
-                format4Flag = false;
-                tempOPCODE = OPCODE;
-            }
-
-            if (checkOpcodeExistsInOPTAB(tempOPCODE))
-            {
-                if (OPTAB[tempOPCODE].format == 3)
-                {
-                    LOCCTR += 3;
-                    prevLOCCTR += 3;
-                    if (format4Flag)
+                    if (checkLabelExistsInSYMTAB(LABEL))
                     {
-                        LOCCTR++;
-                        prevLOCCTR++;
-                    }
-
-                    if (tempOPCODE == "RSUB")
-                    {
-                        OPERAND = "";
+                        errorFile << "Line " << lineNum << " : Duplicate symbol for '" << LABEL << "'. Previously defined at " << SYMTAB[LABEL].address << endl;
+                        errorFlag = true;
                     }
                     else
                     {
+                        char address[10];
+                        sprintf(address, "%04X", LOCCTR);
+                        SYMTAB[LABEL].address = address;
+                        SYMTAB[LABEL].type = 'R';
+                        if (checkLabelExistsInEXTDEFTAB(currSectName, LABEL))
+                        {
+                            CSECTTAB[currSectName].EXTDEFTAB[LABEL] = SYMTAB[LABEL].address;
+                        }
+                    }
+                }
+
+                if (OPCODE[0] == '+')
+                {
+                    format4Flag = true;
+                    tempOPCODE = OPCODE.substr(1, OPCODE.length() - 1);
+                }
+                else
+                {
+                    format4Flag = false;
+                    tempOPCODE = OPCODE;
+                }
+
+                if (checkOpcodeExistsInOPTAB(tempOPCODE))
+                {
+                    if (OPTAB[tempOPCODE].format == 3)
+                    {
+                        LOCCTR += 3;
+                        prevLOCCTR += 3;
+                        if (format4Flag)
+                        {
+                            LOCCTR++;
+                            prevLOCCTR++;
+                        }
+                        if (tempOPCODE == "RSUB")
+                        {
+                            OPERAND = "";
+                        }
+                        else
+                        {
+                            readNextToken(fileLine, index, OPERAND);
+                            if (OPERAND[OPERAND.length() - 1] == ',')
+                            {
+                                readNextToken(fileLine, index, OPERAND2);
+                                OPERAND += OPERAND2;
+                            }
+                        }
+                    }
+                    else if (OPTAB[tempOPCODE].format == 1)
+                    {
+                        OPERAND = "";
+                        LOCCTR++;
+                        prevLOCCTR++;
+                    }
+                    else if (OPTAB[tempOPCODE].format == 2)
+                    {
+                        LOCCTR += 2;
+                        prevLOCCTR += 2;
                         readNextToken(fileLine, index, OPERAND);
                         if (OPERAND[OPERAND.length() - 1] == ',')
                         {
@@ -116,66 +142,115 @@ void pass1()
                         }
                     }
                 }
-                else if (OPTAB[tempOPCODE].format == 1)
+                else if (tempOPCODE == "WORD")
                 {
-                    OPERAND = "";
-                    LOCCTR++;
-                    prevLOCCTR++;
-                }
-                else if (OPTAB[tempOPCODE].format == 2)
-                {
-                    LOCCTR += 2;
-                    prevLOCCTR += 2;
                     readNextToken(fileLine, index, OPERAND);
-                    if (OPERAND[OPERAND.length() - 1] == ',')
-                    {
-                        readNextToken(fileLine, index, OPERAND2);
-                        OPERAND += OPERAND2;
-                    }
+                    LOCCTR += 3;
+                    prevLOCCTR += 3;
+                }
+                else if (tempOPCODE == "RESW")
+                {
+                    readNextToken(fileLine, index, OPERAND);
+                    LOCCTR += 3 * stoi(OPERAND);
+                    prevLOCCTR += 3 * stoi(OPERAND);
+                }
+                else if (tempOPCODE == "RESB")
+                {
+                    readNextToken(fileLine, index, OPERAND);
+                    LOCCTR += stoi(OPERAND);
+                    prevLOCCTR += stoi(OPERAND);
+                }
+                else if (tempOPCODE == "BYTE")
+                {
+                }
+                else if (tempOPCODE == "BASE")
+                {
+                    readNextToken(fileLine, index, OPERAND);
+                }
+                else if (tempOPCODE == "EXTDEF")
+                {
+                    readNextToken(fileLine, index, OPERAND);
+                    processEXTDEFOperand(currSectName, OPERAND);
+                }
+                else if (tempOPCODE == "EXTREF")
+                {
+                    readNextToken(fileLine, index, OPERAND);
+                    processEXTREFOperand(currSectName, OPERAND);
+                }
+                else
+                {
+                    errorFile << "Line " << lineNum << ": Invalid OPCODE";
+                    errorFlag = true;
                 }
             }
-            else if (tempOPCODE == "WORD")
+
+            if (OPCODE == "EXTDEF" || OPCODE == "EXTREF")
             {
-                readNextToken(fileLine, index, OPERAND);
-                LOCCTR += 3;
-                prevLOCCTR += 3;
-            }
-            else if (tempOPCODE == "RESW")
-            {
-                readNextToken(fileLine, index, OPERAND);
-                LOCCTR += 3 * stoi(OPERAND);
-                prevLOCCTR += 3 * stoi(OPERAND);
-            }
-            else if (tempOPCODE == "RESB")
-            {
-                readNextToken(fileLine, index, OPERAND);
-                LOCCTR += stoi(OPERAND);
-                prevLOCCTR += stoi(OPERAND);
-            }
-            else if (tempOPCODE == "BYTE")
-            {
-            }
-            else if (tempOPCODE == "BASE")
-            {
-                readNextToken(fileLine, index, OPERAND);
+                lineNum -= 5;
+                intermediateFile << setw(10) << lineNum << setw(20) << LABEL << setw(10) << OPCODE << setw(15) << OPERAND << endl;
             }
             else
             {
-                errorFile << "Line " << lineNum << ": Invalid OPCODE";
-                errorFlag = true;
+                char address[10];
+                sprintf(address, "%04X", (LOCCTR - prevLOCCTR));
+                intermediateFile << setw(10) << lineNum << setw(10) << address << setw(10) << LABEL << setw(10) << OPCODE << setw(15) << OPERAND << endl;
             }
+
+            getline(sourceFile, fileLine);
+            lineNum += 5;
+            index = 0;
+            prevLOCCTR = 0;
+            readNextToken(fileLine, index, LABEL);
+            readNextToken(fileLine, index, OPCODE);
         }
 
-        char address[10];
-        sprintf(address, "%04X", (LOCCTR - prevLOCCTR));
-        intermediateFile << setw(10) << lineNum << setw(10) << address << setw(10) << LABEL << setw(10) << OPCODE << setw(15) << OPERAND << endl;
+        if(OPCODE == "CSECT")  
+        {
+            lineNum -= 5;
+            OPERAND = "";
+        }
+        if (OPCODE != "END")
+        {
+            
+            if (!checkLabelExistsInSYMTAB(LABEL))
+            {
+                char address[10];
+                sprintf(address, "%04X", LOCCTR);
+                SYMTAB[LABEL].address = address;
+                SYMTAB[LABEL].type = 'R';
+            }
 
-        getline(sourceFile, fileLine);
-        lineNum += 5;
-        index = 0;
-        prevLOCCTR = 0;
-        readNextToken(fileLine, index, LABEL);
-        readNextToken(fileLine, index, OPCODE);
+            char address[10];
+            sprintf(address, "%04X", (LOCCTR - prevLOCCTR));
+            CSECTTAB[currSectName].LOCCTR = address;
+            CSECTTAB[currSectName].length = (LOCCTR - prevLOCCTR);
+            LOCCTR = prevLOCCTR = 0;
+            currSectName = LABEL;
+            sectCtr++;
+            CSECTTAB[currSectName].sect_num = sectCtr;
+
+            sprintf(address, "%04X", (LOCCTR - prevLOCCTR));
+            intermediateFile << setw(10) << lineNum << setw(10) << address << setw(10) << LABEL << setw(10) << OPCODE << setw(15) << OPERAND << endl;
+            getline(sourceFile, fileLine);
+            lineNum += 5;
+            readNextToken(fileLine, index, LABEL);
+            readNextToken(fileLine, index, OPCODE);
+        }
+        else
+        {
+            char address[10];
+            sprintf(address, "%04X", (LOCCTR - prevLOCCTR));
+            CSECTTAB[currSectName].LOCCTR = address;
+            CSECTTAB[currSectName].length = (LOCCTR - prevLOCCTR);
+
+            CSECTTAB[currSectName].sect_num = sectCtr;
+        }
+    }
+
+    if (OPCODE == "END")
+    {
+        firstExecutableSect = LABEL;
+        SYMTAB[firstExecutableSect].address = firstExecutableSect;
     }
 
     readNextToken(fileLine, index, OPERAND);
@@ -188,10 +263,4 @@ void pass1()
     sourceFile.close();
     intermediateFile.close();
     errorFile.close();
-
-//     cout << SYMTAB.size() << endl;
-//     for (auto const &it : SYMTAB)
-//     {
-//         cout<< it.first <<" "<< it.second.address <<" "<< it.second.type << + " \n";
-//     }
 }

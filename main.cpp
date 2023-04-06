@@ -15,6 +15,15 @@ int main()
     //Performing Pass 1
     pass1();
 
+    //Writing Symbol Table
+    write_symtab();
+
+    //Writing EXTDEF Table
+    write_extdeftab();
+
+    //Writing EXTREF Table
+    write_extreftab();
+
     //Performing Pass 2
     pass2();
 }
