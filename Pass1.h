@@ -4,7 +4,7 @@ using namespace std;
 
 ifstream sourceFile;
 ofstream intermediateFile, errorFile;
-string fileName, fileLine, LABEL, OPCODE, OPERAND, OPERAND2, tempOPCODE, currSectName, firstExecutableSect;
+string fileName, fileLine, LABEL, OPCODE, OPERAND, OPERAND2, tempOPCODE, tempOPERAND, currSectName, firstExecutableSect;
 int lineNum = 0, index = 0, LOCCTR, prevLOCCTR = 0, startAddr, programLength, sectCtr;
 bool format4Flag = false, errorFlag;
 
@@ -123,6 +123,21 @@ void pass1()
                                 OPERAND += OPERAND2;
                             }
                         }
+
+                        if (OPCODE[0] == '=')
+                        {
+                            tempOPERAND = OPERAND.substr(1, OPERAND.length() - 1);
+                            if (tempOPERAND == "*")
+                            {
+                                char address[10];
+                                sprintf(address, "%06X", (LOCCTR - prevLOCCTR));
+                                tempOPERAND = "X'" + string(address) + "'";
+                            }
+                            if (!checkLabelExistsInLITTAB(tempOPERAND))
+                            {
+                                LITTAB[tempOPERAND] = "";
+                            }
+                        }
                     }
                     else if (OPTAB[tempOPCODE].format == 1)
                     {
@@ -162,10 +177,93 @@ void pass1()
                 }
                 else if (tempOPCODE == "BYTE")
                 {
+                    readByteOperand(fileLine, index, OPERAND);
+                    if (OPERAND[0] == 'X')
+                    {
+                        LOCCTR += (OPERAND.length() - 3) / 2;
+                        prevLOCCTR += (OPERAND.length() - 3) / 2;
+                    }
+                    else if (OPERAND[0] == 'C')
+                    {
+                        LOCCTR += OPERAND.length() - 3;
+                        prevLOCCTR += OPERAND.length() - 3;
+                    }
                 }
                 else if (tempOPCODE == "BASE")
                 {
                     readNextToken(fileLine, index, OPERAND);
+                }
+                else if (tempOPCODE == "LTORG")
+                {
+                    OPERAND = "";
+                }
+                else if (tempOPCODE == "ORG")
+                {
+                    readNextToken(fileLine, index, OPERAND);
+                    char lastByte = OPERAND[OPERAND.length() - 1];
+                    while (lastByte == '+' || lastByte == '-' || lastByte == '/' || lastByte == '*')
+                    {
+                        readNextToken(fileLine, index, tempOPERAND);
+                        OPERAND += tempOPERAND;
+                        lastByte = OPERAND[OPERAND.length() - 1];
+                    }
+
+                    if (checkLabelExistsInSYMTAB(OPERAND))
+                    {
+                        LOCCTR = stoi(SYMTAB[OPERAND].address, nullptr, 16);
+                    }
+                    else
+                    {
+                        bool relative;
+                        errorFlag = false;
+                        evaluateExp(OPERAND, relative, tempOPERAND, lineNum, errorFile, errorFlag);
+                        if (!errorFlag)
+                        {
+                            LOCCTR = stoi(tempOPERAND, nullptr, 16);
+                        }
+                        errorFlag = false;
+                    }
+                }
+                else if (tempOPCODE == "USE")
+                {
+                    readNextToken(fileLine, index, OPERAND);
+                }
+                else if (tempOPCODE == "EQU")
+                {
+                    readNextToken(fileLine, index, OPERAND);
+                    tempOPERAND = "";
+                    bool relative;
+
+                    if (OPERAND == "*")
+                    {
+                        char address[10];
+                        sprintf(address, "%06X", (LOCCTR - prevLOCCTR));
+                        tempOPERAND = address;
+                        relative = true;
+                    }
+                    else if (checkIfStringIsNumeric(OPERAND))
+                    {
+                        char address[10];
+                        sprintf(address, "%06X", stoi(OPERAND));
+                        tempOPERAND = address;
+                        relative = false;
+                    }
+                    else
+                    {
+                        char lastByte = OPERAND[OPERAND.length() - 1];
+
+                        while (lastByte == '+' || lastByte == '-' || lastByte == '/' || lastByte == '*')
+                        {
+                            readNextToken(fileLine, index, tempOPERAND);
+                            OPERAND += tempOPERAND;
+                            lastByte = OPERAND[OPERAND.length() - 1];
+                        }
+                        evaluateExp(OPERAND, relative, tempOPERAND, lineNum, errorFile, errorFlag);
+                    }
+
+                    SYMTAB[LABEL].address = tempOPERAND;
+                    SYMTAB[LABEL].type = (relative ? 'R' : 'A');
+                    prevLOCCTR = LOCCTR - stoi(tempOPERAND, nullptr, 16);
                 }
                 else if (tempOPCODE == "EXTDEF")
                 {
@@ -204,14 +302,14 @@ void pass1()
             readNextToken(fileLine, index, OPCODE);
         }
 
-        if(OPCODE == "CSECT")  
+        if (OPCODE == "CSECT")
         {
             lineNum -= 5;
             OPERAND = "";
         }
         if (OPCODE != "END")
         {
-            
+
             if (!checkLabelExistsInSYMTAB(LABEL))
             {
                 char address[10];
@@ -233,6 +331,7 @@ void pass1()
             intermediateFile << setw(10) << lineNum << setw(10) << address << setw(10) << LABEL << setw(10) << OPCODE << setw(15) << OPERAND << endl;
             getline(sourceFile, fileLine);
             lineNum += 5;
+            index = 0;
             readNextToken(fileLine, index, LABEL);
             readNextToken(fileLine, index, OPCODE);
         }

@@ -18,6 +18,9 @@ int main()
     //Writing Symbol Table
     write_symtab();
 
+    //Writing Literal Table
+    write_littab();
+    
     //Writing EXTDEF Table
     write_extdeftab();
 

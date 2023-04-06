@@ -54,7 +54,7 @@ void writeTextRecord(ofstream &objectFile, string address, string OPCODE, string
         }
         else
         {
-            if (OPCODE != "START" && OPCODE != "END" && OPCODE != "BASE" && currRec.length() - count(currRec.begin(), currRec.end(), '^') > 0)
+            if (OPCODE != "START" && OPCODE != "END" && OPCODE != "BASE" && OPCODE != "LTORG" && OPCODE != "ORG" && OPCODE != "EQU" && OPCODE != "EXTDEF" && OPCODE != "EXTREF" && currRec.length() - count(currRec.begin(), currRec.end(), '^') > 0)
             {
                 char temp[10];
                 sprintf(temp, "%02X", (currRec.length() - count(currRec.begin(), currRec.end(), '^')) / 2);
@@ -69,6 +69,46 @@ void writeTextRecord(ofstream &objectFile, string address, string OPCODE, string
 void writeModificationRecord(ofstream &objectFile, string modificationRec)
 {
     objectFile << modificationRec;
+}
+
+void writeDRecord(ofstream &objectFile, string OPERAND, string currSectName)
+{
+    string DRec;
+    string temp_address = "";
+    string temp = "";
+    for (int i = 0; i < OPERAND.length(); i++)
+    {
+        while (OPERAND[i] != ',' && i < OPERAND.length())
+        {
+            temp += OPERAND[i];
+            i++;
+        }
+        temp_address = CSECTTAB[currSectName].EXTDEFTAB[temp];
+        temp.resize(6, ' ');
+        DRec += temp + temp_address + "^";
+        temp = "";
+    }
+    DRec.pop_back();
+    objectFile << "D^" << DRec << endl;
+}
+
+void writeRRecord(ofstream &objectFile, string OPERAND, string currSectName)
+{
+    string RRec;
+    string temp = "";
+    for (int i = 0; i < OPERAND.length(); i++)
+    {
+        while (OPERAND[i] != ',' && i < OPERAND.length())
+        {
+            temp += OPERAND[i];
+            i++;
+        }
+        temp.resize(6, ' ');
+        RRec += temp + "^";
+        temp = "";
+    }
+    RRec.pop_back();
+    objectFile << "R^" << RRec << endl;
 }
 
 void writeEndRecord(ofstream &objectFile, string startAddr)
@@ -486,6 +526,87 @@ void pass2()
                                     }
                                 }
                             }
+                            else if (OPERAND[0] == '=')
+                            {
+                                tempOPERAND = OPERAND.substr(1, OPERAND.length() - 1);
+                                if (tempOPERAND == "*")
+                                {
+                                    char address[10];
+                                    sprintf(address, "%06X", stoi(address, nullptr, 16));
+                                    tempOPERAND = "X'" + string(address) + "'";
+
+                                    sprintf(address, "%06X", stoi(LITTAB[tempOPERAND], nullptr, 16));
+                                    modificationRec += "M^" + string(address) + '^';
+                                    modificationRec += "06";
+                                    modificationRec += '\n';
+                                }
+
+                                if (!checkLabelExistsInLITTAB(tempOPERAND))
+                                {
+                                    errorFile << "Line " << lineNum << " : Symbol doesn't exists" << endl;
+                                }
+
+                                int operandAddr = stoi(LITTAB[tempOPERAND], nullptr, 16);
+                                pc = stoi(address, nullptr, 16);
+                                pc += (format4Flag ? 4 : 3);
+                                relativeAddr = operandAddr - pc;
+
+                                if (format4Flag)
+                                {
+                                    char temp[20];
+                                    sprintf(temp, "%02X", stoi(OPTAB[tempOPCODE].opcode, nullptr, 16) + 3); // n = 1, i = 1
+                                    OBJECTCODE = temp;
+                                    OBJECTCODE += '1'; // x = 0, b = 0, p = 0, e = 1
+                                    sprintf(temp, "%05X", operandAddr);
+                                    OBJECTCODE += temp;
+
+                                    sprintf(temp, "%06X", stoi(address, nullptr, 16) + 1);
+                                    modificationRec += "M^" + string(temp) + '^';
+                                    modificationRec += "05";
+                                    modificationRec += "\n";
+                                }
+                                else
+                                {
+                                    if (relativeAddr <= 2047 && relativeAddr >= -2048)
+                                    {
+                                        char temp[20];
+                                        sprintf(temp, "%02X", stoi(OPTAB[tempOPCODE].opcode, nullptr, 16) + 3); // n = 1, i = 1
+                                        OBJECTCODE = temp;
+                                        OBJECTCODE += '2'; // x = 0, b = 0, p = 1, e = 0
+                                        relativeAddr &= 0xfff;
+                                        sprintf(temp, "%03X", relativeAddr);
+                                        OBJECTCODE += temp;
+                                    }
+                                    else if (base)
+                                    {
+                                        relativeAddr = operandAddr - baseRegVal;
+                                        if (relativeAddr <= 4095 && relativeAddr >= 0)
+                                        {
+                                            char temp[20];
+                                            sprintf(temp, "%02X", stoi(OPTAB[tempOPCODE].opcode, nullptr, 16) + 3); // n = 1, i = 1
+                                            OBJECTCODE = temp;
+                                            OBJECTCODE += '4'; // x = 0, b = 1, p = 0, e = 0
+                                            relativeAddr &= 0xfff;
+                                            sprintf(temp, "%03X", relativeAddr);
+                                            OBJECTCODE += temp;
+                                        }
+                                    }
+                                    else if (operandAddr <= 4095)
+                                    {
+                                        char temp[20];
+                                        sprintf(temp, "%02X", stoi(OPTAB[tempOPCODE].opcode, nullptr, 16) + 3); // n = 1, i = 1
+                                        OBJECTCODE = temp;
+                                        OBJECTCODE += '0'; // x = 0, b = 0, p = 0, e = 0
+                                        sprintf(temp, "%03X", operandAddr);
+                                        OBJECTCODE += temp;
+
+                                        sprintf(temp, "%06X", stoi(address, nullptr, 16) + 1);
+                                        modificationRec += "M^" + string(temp) + '^';
+                                        modificationRec += "03";
+                                        modificationRec += "\n";
+                                    }
+                                }
+                            }
                             else
                             {
                                 if (!checkLabelExistsInSYMTAB(tempOPERAND) || checkLabelExistsInEXTREFTAB(currSectName, tempOPERAND))
@@ -577,6 +698,29 @@ void pass2()
                 }
                 else if (tempOPCODE == "BYTE")
                 {
+                    if (OPERAND[0] == 'X')
+                    {
+                        OBJECTCODE = OPERAND.substr(2, OPERAND.length() - 3);
+                    }
+                    else if (OPERAND[0] == 'C')
+                    {
+                        char temp[20];
+                        sprintf(temp, "%06X", stoi(OPERAND.substr(2, OPERAND.length() - 3)));
+                        OBJECTCODE = temp;
+                    }
+                }
+                else if (LABEL == "*")
+                {
+                    if (OPCODE[1] == 'C')
+                    {
+                        char temp[20];
+                        sprintf(temp, "%06X", stoi(OPERAND.substr(3, OPERAND.length() - 4)));
+                        OBJECTCODE = temp;
+                    }
+                    else if (OPCODE[1] == 'X')
+                    {
+                        OBJECTCODE = OPCODE.substr(3, OPCODE.length() - 4);
+                    }
                 }
                 else if (tempOPCODE == "WORD")
                 {
@@ -598,12 +742,23 @@ void pass2()
                 }
 
                 writeTextRecord(objectFile, address, OPCODE, OBJECTCODE, currRec);
+                if (OPCODE == "EXTDEF")
+                    writeDRecord(objectFile, OPERAND, currSectName);
+                if (OPCODE == "EXTREF")
+                    writeRRecord(objectFile, OPERAND, currSectName);
             }
 
             listingFile << setw(10) << lineNum << setw(10) << address << setw(10) << LABEL << setw(10) << OPCODE << setw(15) << OPERAND << setw(15) << OBJECTCODE << endl;
             getline(intermediateFile, fileLine);
             processIntermediateFileLine(fileLine, lineNum, address, LABEL, OPCODE, OPERAND);
             OBJECTCODE = "";
+        }
+
+        if (OPCODE == "CSECT")
+        {
+            listingFile << setw(10) << lineNum << setw(10) << address << setw(10) << LABEL << setw(10) << OPCODE << setw(15) << OPERAND << setw(15) << OBJECTCODE << endl;
+            getline(intermediateFile, fileLine);
+            processIntermediateFileLine(fileLine, lineNum, address, LABEL, OPCODE, OPERAND);
         }
     }
 
@@ -627,6 +782,7 @@ void pass2()
             listingFile << setw(10) << lineNum << setw(10) << address << setw(10) << LABEL << setw(10) << OPCODE << setw(15) << OPERAND << setw(15) << OBJECTCODE << endl;
         }
     }
+
     writeTextRecord(objectFile, address, OPCODE, OBJECTCODE, currRec, true);
     writeModificationRecord(objectFile, modificationRec);
     writeEndRecord(objectFile, startAddr);
