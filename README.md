@@ -1,4 +1,5 @@
 # C++ Implementation for a Two-pass SIC-XE Assembler
 
 Run main.cpp ONLY.
-By default, input file is "input.txt", whcich can be changed in main.cpp
+
+By default, input file is "input.txt", which can be changed in main.cpp
